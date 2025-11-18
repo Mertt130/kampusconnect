@@ -1,0 +1,911 @@
+// KampüsConnect Database Schema
+// Prisma ORM ile PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// KULLANICI YÖNETİMİ
+// ============================================
+
+enum UserRole {
+  STUDENT      // Öğrenci/Yeni Mezun
+  EMPLOYER     // İşveren
+  ADMIN        // Yönetici
+}
+
+enum UserStatus {
+  PENDING      // Onay bekliyor
+  ACTIVE       // Aktif
+  SUSPENDED    // Geçici ban
+  BANNED       // Kalıcı ban
+  REJECTED     // Reddedildi
+}
+
+enum GraduationStatus {
+  STUDENT      // Aktif öğrenci
+  GRADUATED    // Mezun (2 yıl içinde)
+  EXPIRED      // Süresi dolmuş
+}
+
+model User {
+  id            String      @id @default(uuid())
+  email         String      @unique
+  password      String
+  role          UserRole
+  status        UserStatus  @default(PENDING)
+  
+  // Profil bilgileri
+  firstName     String
+  lastName      String
+  phone         String?
+  profilePhoto  String?
+  coverPhoto    String?
+  
+  // Doğrulama
+  emailVerified Boolean     @default(false)
+  verifiedAt    DateTime?
+  
+  // Tarihler
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  lastLoginAt   DateTime?
+  
+  // İlişkiler
+  studentProfile   StudentProfile?
+  employerProfile  EmployerProfile?
+  jobListings      JobListing[]
+  applications     Application[]
+  sentMessages     Message[]      @relation("SentMessages")
+  receivedMessages Message[]      @relation("ReceivedMessages")
+  notifications    Notification[]
+  documents        Document[]
+  follows          Follow[]
+  reports          Report[]       @relation("Reporter")
+  reportedBy       Report[]       @relation("Reported")
+  eventRegistrations EventRegistration[]
+  blogComments     BlogComment[]
+  savedJobs        SavedJob[]
+  searchPreferences SearchPreference[]
+  feedbacks        Feedback[]
+  
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+// ============================================
+// ÖĞRENCİ PROFİLİ
+// ============================================
+
+model StudentProfile {
+  id              String            @id @default(uuid())
+  userId          String            @unique
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Temel bilgiler
+  bio             String?           @db.Text
+  title           String?           // "Yazılım Mühendisliği Öğrencisi"
+  location        String?
+  website         String?
+  linkedIn        String?
+  github          String?
+  portfolio       String?
+  
+  // Eğitim bilgileri
+  university      String
+  department      String
+  startYear       Int
+  graduationYear  Int
+  gpa             Float?
+  graduationStatus GraduationStatus @default(STUDENT)
+  
+  // Öğrenci belgesi
+  studentDocument String?           // Belge URL
+  documentVerified Boolean          @default(false)
+  documentVerifiedAt DateTime?
+  
+  // Tercihler
+  desiredPositions String[]         // ["Yazılım Geliştirici", "Frontend Developer"]
+  preferredSectors String[]
+  preferredCities  String[]
+  workType         String[]         // ["Tam Zamanlı", "Uzaktan", "Hibrit"]
+  salaryExpectation Int?
+  availableFrom    DateTime?
+  
+  // İstatistikler
+  profileViews    Int               @default(0)
+  profileCompleteness Int           @default(0) // 0-100
+  
+  // İlişkiler
+  experiences     Experience[]
+  educations      Education[]
+  skills          Skill[]
+  certificates    Certificate[]
+  projects        Project[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([userId])
+  @@index([university])
+  @@index([graduationStatus])
+  @@map("student_profiles")
+}
+
+model Experience {
+  id              String    @id @default(uuid())
+  studentProfileId String
+  studentProfile  StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  
+  company         String
+  position        String
+  startDate       DateTime
+  endDate         DateTime?
+  isCurrent       Boolean   @default(false)
+  description     String?   @db.Text
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([studentProfileId])
+  @@map("experiences")
+}
+
+model Education {
+  id              String    @id @default(uuid())
+  studentProfileId String
+  studentProfile  StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  
+  institution     String
+  degree          String
+  field           String
+  startDate       DateTime
+  endDate         DateTime?
+  gpa             Float?
+  description     String?   @db.Text
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([studentProfileId])
+  @@map("educations")
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+model Skill {
+  id              String    @id @default(uuid())
+  studentProfileId String
+  studentProfile  StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  
+  name            String
+  level           SkillLevel
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([studentProfileId])
+  @@map("skills")
+}
+
+model Certificate {
+  id              String    @id @default(uuid())
+  studentProfileId String
+  studentProfile  StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  
+  name            String
+  issuer          String
+  issueDate       DateTime
+  expiryDate      DateTime?
+  credentialId    String?
+  credentialUrl   String?
+  fileUrl         String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([studentProfileId])
+  @@map("certificates")
+}
+
+model Project {
+  id              String    @id @default(uuid())
+  studentProfileId String
+  studentProfile  StudentProfile @relation(fields: [studentProfileId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String    @db.Text
+  technologies    String[]
+  images          String[]
+  projectUrl      String?
+  githubUrl       String?
+  demoUrl         String?
+  startDate       DateTime?
+  endDate         DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([studentProfileId])
+  @@map("projects")
+}
+
+// ============================================
+// İŞVEREN PROFİLİ
+// ============================================
+
+enum CompanySize {
+  STARTUP       // 1-10
+  SMALL         // 11-50
+  MEDIUM        // 51-200
+  LARGE         // 201-1000
+  ENTERPRISE    // 1000+
+}
+
+model EmployerProfile {
+  id              String      @id @default(uuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Şirket bilgileri
+  companyName     String
+  companyLogo     String?
+  companyCover    String?
+  sector          String
+  companySize     CompanySize
+  foundedYear     Int?
+  website         String?
+  
+  // Adres
+  address         String
+  city            String
+  country         String      @default("Türkiye")
+  
+  // Hakkında
+  about           String?     @db.Text
+  vision          String?     @db.Text
+  mission         String?     @db.Text
+  values          String[]
+  
+  // Başvuru bilgileri (İlk kayıt için)
+  applicationGoals String?    @db.Text
+  applicationVision String?   @db.Text
+  
+  // İletişim
+  contactPerson   String
+  contactEmail    String
+  contactPhone    String
+  
+  // Doğrulama
+  taxNumber       String?
+  tradeRegister   String?
+  verified        Boolean     @default(false)
+  verifiedAt      DateTime?
+  
+  // Sosyal medya
+  linkedIn        String?
+  twitter         String?
+  facebook        String?
+  instagram       String?
+  
+  // İstatistikler
+  totalJobListings Int        @default(0)
+  totalApplications Int       @default(0)
+  followerCount   Int         @default(0)
+  profileViews    Int         @default(0)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([userId])
+  @@index([companyName])
+  @@index([sector])
+  @@map("employer_profiles")
+}
+
+// ============================================
+// İŞ İLANLARI
+// ============================================
+
+enum JobType {
+  FULL_TIME     // Tam Zamanlı
+  PART_TIME     // Yarı Zamanlı
+  INTERNSHIP    // Staj
+  CONTRACT      // Kontrat
+}
+
+enum WorkplaceType {
+  ON_SITE       // Ofis
+  REMOTE        // Uzaktan
+  HYBRID        // Hibrit
+}
+
+enum ExperienceLevel {
+  INTERNSHIP    // Staj
+  ENTRY_LEVEL   // Başlangıç
+  JUNIOR        // Junior
+}
+
+enum JobStatus {
+  DRAFT         // Taslak
+  PENDING       // Onay bekliyor
+  ACTIVE        // Yayında
+  EXPIRED       // Süresi doldu
+  CLOSED        // Kapatıldı
+  REJECTED      // Reddedildi
+}
+
+model JobListing {
+  id              String          @id @default(uuid())
+  employerId      String
+  employer        User            @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  
+  // Temel bilgiler
+  title           String
+  companyName     String
+  location        String
+  jobType         JobType
+  workplaceType   WorkplaceType
+  experienceLevel ExperienceLevel
+  sector          String
+  
+  // İş detayları
+  description     String          @db.Text
+  responsibilities String[]
+  requirements    String[]
+  qualifications  String[]
+  technicalSkills String[]
+  softSkills      String[]
+  
+  // Koşullar
+  salaryMin       Int?
+  salaryMax       Int?
+  currency        String          @default("TRY")
+  benefits        String[]
+  workingHours    String?
+  startDate       DateTime?
+  applicationDeadline DateTime?
+  
+  // Ek bilgiler
+  positionCount   Int             @default(1)
+  requiresDocuments Boolean       @default(false)
+  
+  // Durum
+  status          JobStatus       @default(DRAFT)
+  rejectionReason String?         @db.Text
+  
+  // İstatistikler
+  viewCount       Int             @default(0)
+  applicationCount Int            @default(0)
+  
+  // İlişkiler
+  applications    Application[]
+  savedBy         SavedJob[]
+  
+  // Tarihler
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  publishedAt     DateTime?
+  closedAt        DateTime?
+  
+  @@index([employerId])
+  @@index([status])
+  @@index([sector])
+  @@index([location])
+  @@index([jobType])
+  @@index([experienceLevel])
+  @@map("job_listings")
+}
+
+// ============================================
+// BAŞVURULAR
+// ============================================
+
+enum ApplicationStatus {
+  SUBMITTED     // Gönderildi
+  VIEWED        // Görüldü
+  REVIEWING     // Değerlendiriliyor
+  INTERVIEW     // Mülakat
+  ACCEPTED      // Kabul edildi
+  REJECTED      // Reddedildi
+  WITHDRAWN     // Geri çekildi
+}
+
+model Application {
+  id              String            @id @default(uuid())
+  jobListingId    String
+  jobListing      JobListing        @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+  applicantId     String
+  applicant       User              @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  
+  // Başvuru bilgileri
+  coverLetter     String?           @db.Text
+  cvUrl           String
+  additionalDocs  String[]
+  
+  // Durum
+  status          ApplicationStatus @default(SUBMITTED)
+  statusUpdatedAt DateTime          @default(now())
+  
+  // İşveren notları
+  employerNotes   String?           @db.Text
+  rating          Int?              // 1-5
+  
+  // Tarihler
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  viewedAt        DateTime?
+  respondedAt     DateTime?
+  
+  @@unique([jobListingId, applicantId])
+  @@index([jobListingId])
+  @@index([applicantId])
+  @@index([status])
+  @@map("applications")
+}
+
+// ============================================
+// MESAJLAŞMA
+// ============================================
+
+enum MessageType {
+  TEXT
+  FILE
+  SYSTEM
+}
+
+model Message {
+  id              String      @id @default(uuid())
+  senderId        String
+  sender          User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId      String
+  receiver        User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  
+  // Mesaj içeriği
+  type            MessageType @default(TEXT)
+  content         String?     @db.Text
+  fileUrl         String?
+  fileName        String?
+  fileSize        Int?
+  
+  // Durum
+  isRead          Boolean     @default(false)
+  readAt          DateTime?
+  isDeleted       Boolean     @default(false)
+  deletedBy       String?
+  
+  // İlişkili başvuru (opsiyonel)
+  applicationId   String?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+// ============================================
+// BİLDİRİMLER
+// ============================================
+
+enum NotificationType {
+  NEW_JOB           // Yeni ilan
+  APPLICATION_STATUS // Başvuru durumu
+  NEW_MESSAGE       // Yeni mesaj
+  PROFILE_VIEW      // Profil görüntülendi
+  COMPANY_UPDATE    // Şirket güncelleme
+  EVENT_REMINDER    // Etkinlik hatırlatma
+  NEW_BLOG          // Yeni blog
+  SYSTEM            // Sistem bildirimi
+  APPROVAL          // Onay/Red
+}
+
+model Notification {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type            NotificationType
+  title           String
+  message         String            @db.Text
+  
+  // Link bilgisi
+  actionUrl       String?
+  actionType      String?           // "job", "application", "message", etc.
+  actionId        String?
+  
+  // Durum
+  isRead          Boolean           @default(false)
+  readAt          DateTime?
+  
+  // Gönderim kanalları
+  sentEmail       Boolean           @default(false)
+  sentPush        Boolean           @default(false)
+  sentWhatsApp    Boolean           @default(false)
+  
+  createdAt       DateTime          @default(now())
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================
+// DÖKÜMANLAR
+// ============================================
+
+enum DocumentType {
+  CV
+  STUDENT_DOCUMENT
+  CERTIFICATE
+  TRANSCRIPT
+  REFERENCE_LETTER
+  PORTFOLIO
+  OTHER
+}
+
+model Document {
+  id              String        @id @default(uuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type            DocumentType
+  name            String
+  fileUrl         String
+  fileSize        Int
+  mimeType        String
+  
+  // Doğrulama (öğrenci belgesi için)
+  isVerified      Boolean       @default(false)
+  verifiedAt      DateTime?
+  verifiedBy      String?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([userId])
+  @@index([type])
+  @@map("documents")
+}
+
+// ============================================
+// TAKİP SİSTEMİ
+// ============================================
+
+model Follow {
+  id              String    @id @default(uuid())
+  followerId      String
+  follower        User      @relation(fields: [followerId], references: [id], onDelete: Cascade)
+  companyId       String    // EmployerProfile userId
+  
+  createdAt       DateTime  @default(now())
+  
+  @@unique([followerId, companyId])
+  @@index([followerId])
+  @@index([companyId])
+  @@map("follows")
+}
+
+// ============================================
+// KAYITLI İŞLER
+// ============================================
+
+model SavedJob {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobListingId    String
+  jobListing      JobListing  @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+  
+  notes           String?     @db.Text
+  
+  createdAt       DateTime    @default(now())
+  
+  @@unique([userId, jobListingId])
+  @@index([userId])
+  @@map("saved_jobs")
+}
+
+// ============================================
+// ARAMA TERCİHLERİ
+// ============================================
+
+model SearchPreference {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name            String
+  keywords        String[]
+  locations       String[]
+  sectors         String[]
+  jobTypes        String[]
+  workplaceTypes  String[]
+  experienceLevels String[]
+  salaryMin       Int?
+  salaryMax       Int?
+  
+  // Bildirim
+  notifyOnMatch   Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@map("search_preferences")
+}
+
+// ============================================
+// ETKİNLİKLER
+// ============================================
+
+enum EventType {
+  WEBINAR
+  WORKSHOP
+  CAREER_FAIR
+  NETWORKING
+  CONFERENCE
+  OTHER
+}
+
+model Event {
+  id              String      @id @default(uuid())
+  organizerId     String      // User ID (employer or admin)
+  
+  title           String
+  description     String      @db.Text
+  type            EventType
+  category        String
+  
+  // Tarih ve yer
+  startDate       DateTime
+  endDate         DateTime
+  location        String?     // Fiziksel yer
+  onlineLink      String?     // Online link
+  isOnline        Boolean     @default(false)
+  
+  // Görsel
+  coverImage      String?
+  
+  // Kapasite
+  maxParticipants Int?
+  currentParticipants Int   @default(0)
+  
+  // Durum
+  isActive        Boolean     @default(true)
+  
+  // İlişkiler
+  registrations   EventRegistration[]
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([startDate])
+  @@index([type])
+  @@map("events")
+}
+
+model EventRegistration {
+  id              String    @id @default(uuid())
+  eventId         String
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  status          String    @default("registered") // registered, attended, cancelled
+  
+  createdAt       DateTime  @default(now())
+  
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("event_registrations")
+}
+
+// ============================================
+// BLOG
+// ============================================
+
+enum BlogCategory {
+  CAREER_ADVICE
+  INDUSTRY_NEWS
+  SUCCESS_STORIES
+  INTERVIEWS
+  TIPS
+  OTHER
+}
+
+model BlogPost {
+  id              String        @id @default(uuid())
+  authorId        String        // Admin user ID
+  
+  title           String
+  slug            String        @unique
+  content         String        @db.Text
+  excerpt         String?
+  coverImage      String?
+  category        BlogCategory
+  tags            String[]
+  
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  
+  // Durum
+  isPublished     Boolean       @default(false)
+  publishedAt     DateTime?
+  
+  // İstatistikler
+  viewCount       Int           @default(0)
+  likeCount       Int           @default(0)
+  
+  // İlişkiler
+  comments        BlogComment[]
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([slug])
+  @@index([category])
+  @@index([isPublished])
+  @@map("blog_posts")
+}
+
+model BlogComment {
+  id              String    @id @default(uuid())
+  postId          String
+  post            BlogPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content         String    @db.Text
+  
+  // Moderasyon
+  isApproved      Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([postId])
+  @@index([userId])
+  @@map("blog_comments")
+}
+
+// ============================================
+// ŞİKAYET SİSTEMİ
+// ============================================
+
+enum ReportType {
+  INAPPROPRIATE_MESSAGE
+  FALSE_INFORMATION
+  SPAM
+  FAKE_PROFILE
+  HARASSMENT
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id              String        @id @default(uuid())
+  reporterId      String
+  reporter        User          @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUserId  String
+  reportedUser    User          @relation("Reported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  
+  type            ReportType
+  reason          String        @db.Text
+  evidence        String[]      // Screenshot URLs, message IDs, etc.
+  
+  // Durum
+  status          ReportStatus  @default(PENDING)
+  adminNotes      String?       @db.Text
+  actionTaken     String?       // "warning", "temporary_ban", "permanent_ban", "none"
+  
+  // İnceleme
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([status])
+  @@map("reports")
+}
+
+// ============================================
+// GERİ BİLDİRİM SİSTEMİ
+// ============================================
+
+enum FeedbackType {
+  BUG_REPORT
+  FEATURE_REQUEST
+  UI_FEEDBACK
+  GENERAL
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+model Feedback {
+  id              String          @id @default(uuid())
+  
+  // Kullanıcı bilgileri (opsiyonel - anonim olabilir)
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  // Geri bildirim içeriği
+  type            FeedbackType    @default(GENERAL)
+  subject         String
+  message         String          @db.Text
+  
+  // Teknik bilgiler
+  pageUrl         String
+  userAgent       String
+  viewportWidth   Int
+  viewportHeight  Int
+  timestamp       DateTime        @default(now())
+  
+  // Durum
+  status          FeedbackStatus  @default(NEW)
+  adminNotes      String?         @db.Text
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("feedbacks")
+}
+
+// ============================================
+// PLATFORM AYARLARI
+// ============================================
+
+model PlatformSettings {
+  id              String    @id @default(uuid())
+  key             String    @unique
+  value           String    @db.Text
+  description     String?
+  
+  updatedAt       DateTime  @updatedAt
+  updatedBy       String?
+  
+  @@map("platform_settings")
+}
+
+// Örnek ayarlar:
+// - minimum_salary_istanbul: 17000
+// - minimum_salary_ankara: 15000
+// - max_job_duration_days: 90
+// - max_applications_per_day: 10
+// - max_messages_per_hour: 50

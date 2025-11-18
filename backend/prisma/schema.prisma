@@ -1,0 +1,389 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUM DEFINITIONS
+// ============================================
+
+enum UserRole {
+  STUDENT
+  COMPANY
+  MODERATOR
+  SUPER_ADMIN
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  INTERNSHIP
+  FREELANCE
+  REMOTE
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  USER
+  JOB
+  MESSAGE
+  OTHER
+}
+
+enum NotificationType {
+  APPLICATION_RECEIVED
+  APPLICATION_STATUS_CHANGED
+  MESSAGE_RECEIVED
+  JOB_POSTED
+  PROFILE_VIEWED
+  COMPANY_VERIFIED
+  SYSTEM
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String
+  role              UserRole  @default(STUDENT)
+  isVerified        Boolean   @default(false)
+  isActive          Boolean   @default(true)
+  emailVerifyToken  String?   @unique
+  resetPasswordToken String?  @unique
+  resetPasswordExpiry DateTime?
+  lastLogin         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  studentProfile    StudentProfile?
+  companyProfile    CompanyProfile?
+  jobs              Job[]
+  applications      Application[]
+  sentMessages      Message[]        @relation("SentMessages")
+  conversations1    Conversation[]   @relation("User1Conversations")
+  conversations2    Conversation[]   @relation("User2Conversations")
+  notifications     Notification[]
+  reportsFiled      Report[]         @relation("Reporter")
+  reportsAgainst    Report[]         @relation("ReportedUser")
+  adminLogs         AdminLog[]       @relation("AdminUser")
+  targetLogs        AdminLog[]       @relation("TargetUser")
+  refreshTokens     RefreshToken[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model StudentProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName       String
+  lastName        String
+  university      String
+  department      String
+  graduationYear  Int
+  gpa             Float?
+  about           String?  @db.Text
+  skills          String[] @default([])
+  languages       String[] @default([])
+  cvUrl           String?
+  profilePhotoUrl String?
+  linkedinUrl     String?
+  githubUrl       String?
+  portfolioUrl    String?
+  phoneNumber     String?
+  city            String?
+  birthDate       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([university])
+  @@index([department])
+}
+
+model CompanyProfile {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName         String
+  sector              String
+  employeeCount       String?
+  foundedYear         Int?
+  description         String?  @db.Text
+  website             String?
+  logoUrl             String?
+  coverPhotoUrl       String?
+  address             String?
+  city                String?
+  country             String?
+  phoneNumber         String?
+  taxNumber           String?
+  isVerified          Boolean  @default(false)
+  verificationDocs    String[] @default([])
+  verifiedAt          DateTime?
+  verifiedBy          String?
+  linkedinUrl         String?
+  twitterUrl          String?
+  facebookUrl         String?
+  instagramUrl        String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+  @@index([companyName])
+  @@index([sector])
+  @@index([isVerified])
+}
+
+// ============================================
+// JOB MANAGEMENT
+// ============================================
+
+model Job {
+  id                String      @id @default(uuid())
+  companyId         String
+  company           User        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title             String
+  description       String      @db.Text
+  requirements      String[]    @default([])
+  responsibilities  String[]    @default([])
+  qualifications    String[]    @default([])
+  benefits          String[]    @default([])
+  jobType           JobType
+  location          String
+  city              String?
+  isRemote          Boolean     @default(false)
+  salaryMin         Int?
+  salaryMax         Int?
+  salaryCurrency    String?     @default("TRY")
+  experienceMin     Int?        @default(0)
+  experienceMax     Int?
+  educationLevel    String?
+  department        String?
+  applicationDeadline DateTime?
+  isActive          Boolean     @default(true)
+  isFeatured        Boolean     @default(false)
+  viewCount         Int         @default(0)
+  applicationCount  Int         @default(0)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  applications      Application[]
+  reports           Report[]      @relation("ReportedJob")
+
+  @@index([companyId])
+  @@index([isActive])
+  @@index([jobType])
+  @@index([city])
+  @@index([createdAt])
+  @@index([applicationDeadline])
+}
+
+model Application {
+  id              String            @id @default(uuid())
+  jobId           String
+  job             Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status          ApplicationStatus @default(PENDING)
+  coverLetter     String?           @db.Text
+  cvUrl           String?
+  portfolioUrl    String?
+  expectedSalary  Int?
+  availableDate   DateTime?
+  notes           String?           @db.Text
+  rejectionReason String?
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([jobId, studentId])
+  @@index([jobId])
+  @@index([studentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================
+// MESSAGING SYSTEM
+// ============================================
+
+model Conversation {
+  id              String    @id @default(uuid())
+  participant1Id  String
+  participant1    User      @relation("User1Conversations", fields: [participant1Id], references: [id], onDelete: Cascade)
+  participant2Id  String
+  participant2    User      @relation("User2Conversations", fields: [participant2Id], references: [id], onDelete: Cascade)
+  lastMessageAt   DateTime?
+  lastMessageId   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  messages        Message[]
+
+  @@unique([participant1Id, participant2Id])
+  @@index([participant1Id])
+  @@index([participant2Id])
+  @@index([lastMessageAt])
+}
+
+model Message {
+  id              String       @id @default(uuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content         String       @db.Text
+  isRead          Boolean      @default(false)
+  readAt          DateTime?
+  isEdited        Boolean      @default(false)
+  editedAt        DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+
+  // Relations
+  reports         Report[]     @relation("ReportedMessage")
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([isRead])
+}
+
+// ============================================
+// NOTIFICATION SYSTEM
+// ============================================
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  content     String
+  actionUrl   String?
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ============================================
+// MODERATION SYSTEM
+// ============================================
+
+model Report {
+  id              String       @id @default(uuid())
+  reporterId      String
+  reporter        User         @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportType      ReportType
+  reportedUserId  String?
+  reportedUser    User?        @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  reportedJobId   String?
+  reportedJob     Job?         @relation("ReportedJob", fields: [reportedJobId], references: [id], onDelete: SetNull)
+  reportedMessageId String?
+  reportedMessage Message?     @relation("ReportedMessage", fields: [reportedMessageId], references: [id], onDelete: SetNull)
+  reason          String
+  description     String?      @db.Text
+  status          ReportStatus @default(PENDING)
+  moderatorNotes  String?      @db.Text
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([reporterId])
+  @@index([reportType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AdminLog {
+  id            String   @id @default(uuid())
+  adminId       String
+  admin         User     @relation("AdminUser", fields: [adminId], references: [id], onDelete: Cascade)
+  actionType    String
+  targetUserId  String?
+  targetUser    User?    @relation("TargetUser", fields: [targetUserId], references: [id], onDelete: SetNull)
+  details       Json?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([adminId])
+  @@index([actionType])
+  @@index([createdAt])
+}
+
+// ============================================
+// SITE SETTINGS
+// ============================================
+
+model SiteSettings {
+  id                String   @id @default("default")
+  siteName          String   @default("KampüsConnect")
+  siteLogo          String?
+  siteDescription   String?
+  contactEmail      String?
+  contactPhone      String?
+  contactAddress    String?
+  primaryColor      String   @default("#3B82F6")
+  secondaryColor    String   @default("#10B981")
+  facebookUrl       String?
+  twitterUrl        String?
+  linkedinUrl       String?
+  instagramUrl      String?
+  termsOfService    String?  @db.Text
+  privacyPolicy     String?  @db.Text
+  aboutUs           String?  @db.Text
+  emailTemplates    Json?
+  maintenanceMode   Boolean  @default(false)
+  maintenanceMessage String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
